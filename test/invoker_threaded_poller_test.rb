@@ -16,6 +16,7 @@ context "the invoker 'threaded poller'" do
   
   specify "should not explode when listen is called, and stop nicely when stop is called. " do
     connection = mock()
+    connection.expects(:verify!).at_least_once
     connection.expects(:active?).at_least_once.returns(true)
     ActiveRecord::Base.expects(:connection).at_least_once.returns(connection)
     
