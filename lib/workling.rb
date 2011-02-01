@@ -132,6 +132,10 @@ module Workling
     end
   end
   
+  def self.config=(config)
+    @@config = config
+  end
+  
   #
   #  Raises exceptions thrown inside of the worker. normally, these are logged to 
   #  logger.error. it's easy to miss these log calls while developing, though. 

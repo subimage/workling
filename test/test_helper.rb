@@ -16,12 +16,14 @@ RAILS_ENV = "test"
 RAILS_ROOT = File.dirname(__FILE__) + "/.." # fake the rails root directory.
 RAILS_DEFAULT_LOGGER = Logger.new(STDOUT)
 RAILS_DEFAULT_LOGGER.level = Logger::WARN
+DEFAULT_CONFIG = {}.freeze
 
 require "mocks/spawn"
 require "mocks/logger"
 require "workling"
 require "workling/base"
 
+Workling.config = DEFAULT_CONFIG.dup
 Workling.try_load_a_memcache_client
 
 require "workling/discovery"

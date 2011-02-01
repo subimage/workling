@@ -8,10 +8,40 @@ context "the invoker 'threaded poller'" do
     @invoker = Workling::Remote::Invokers::ThreadedPoller.new(routing, @client.class)
   end
   
+  teardown do
+    Workling.config = DEFAULT_CONFIG.dup
+  end
+  
   specify "should invoke Util.echo with the arg 'hello' if the string 'hello' is set onto the queue utils__echo" do
     Util.any_instance.stubs(:echo).with("hello")
     @client.request("utils__echo", "hello")
     @invoker.dispatch!(@client, Util)
+  end
+  
+  specify "should create the number of threads as specified by the per-worker config" do
+    Workling.config = {
+      :listeners => {
+        'Util' => {
+          :threads => 3
+        }
+      }
+    }
+    
+    connection = mock()
+    connection.expects(:verify!).at_least_once
+    connection.expects(:active?).at_least_once.returns(true)
+    ActiveRecord::Base.expects(:connection).at_least_once.returns(connection)
+    
+    client = mock()
+    client.expects(:retrieve).at_least_once.returns("hi")
+    client.expects(:connect).at_least_once.returns(true)
+    Workling::Clients::MemoryQueueClient.expects(:new).at_least_once.returns(client)
+    
+    listener = Thread.new { @invoker.listen }
+    sleep 0.1 while !@invoker.started?
+    @invoker.worker_threads.should.equal 1 + 3
+    @invoker.stop
+    listener.join
   end
   
   specify "should not explode when listen is called, and stop nicely when stop is called. " do
