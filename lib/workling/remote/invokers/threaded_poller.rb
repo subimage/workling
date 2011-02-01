@@ -131,6 +131,8 @@ module Workling
           end
         
           logger.debug("Listener thread #{clazz.name} ended")
+        ensure
+          release_active_record_connection
         end
       
         # Dispatcher for one worker class. Will throw MemCacheError if unable to connect.
@@ -164,6 +166,15 @@ module Workling
           else
             def active_record_is_thread_safe?
               false
+            end
+          end
+          
+          if ActiveRecord::Base.respond_to?(:clear_active_connections!)
+            def release_active_record_connection
+              ActiveRecord::Base.clear_active_connections!
+            end
+          else
+            def release_active_record_connection
             end
           end
       end
