@@ -11,7 +11,7 @@ module Workling
     module Invokers
       class ThreadedPoller < Workling::Remote::Invokers::Base
         
-        cattr_accessor :sleep_time, :reset_time
+        cattr_accessor :verify_database_connection, :sleep_time, :reset_time
         
         class DummyMutex
           def synchronize
@@ -22,6 +22,8 @@ module Workling
         def initialize(routing, client_class)
           super
           
+          ThreadedPoller.verify_database_connection =
+            fetch_bool_config(Workling.config, :verify_database_connection, true)
           ThreadedPoller.sleep_time = Workling.config[:sleep_time] || 2
           ThreadedPoller.reset_time = Workling.config[:reset_time] || 30
           
@@ -39,18 +41,32 @@ module Workling
             ActiveRecord::Base.allow_concurrency = true
           end
 
-          # Create a thread for each worker.
+          # Create threads for each worker.
+          total_threads = 0
           Workling::Discovery.discovered.each do |clazz|
-            logger.debug("Discovered listener #{clazz}")
-            @workers.add(Thread.new(clazz) { |c| clazz_listen(c) })
+            nthreads = 1
+            if Workling.config[:listeners] && (config = Workling.config[:listeners][clazz.to_s])
+              config = config.symbolize_keys
+              nthreads = config[:threads] if config.has_key?(:threads)
+            end
+            
+            logger.debug("Discovered listener #{clazz}; spawning #{nthreads} thread(s)")
+            total_threads += nthreads
+            nthreads.times do
+              @workers.add(Thread.new(clazz) { |c| clazz_listen(c) })
+            end
           end
+          
+          @total_threads = total_threads
           
           # Wait for all workers to complete
           @workers.list.each { |t| t.join }
 
           logger.debug("Reaped listener threads. ")
         
+        ensure
           # Clean up all the connections.
+          @total_threads = nil
           ActiveRecord::Base.verify_active_connections!
           logger.debug("Cleaned up connection: out!")
         end
@@ -58,7 +74,7 @@ module Workling
         # Check if all Worker threads have been started. 
         def started?
           logger.debug("checking if started... list size is #{ worker_threads }")
-          Workling::Discovery.discovered.size == worker_threads
+          @total_threads == worker_threads
         end
         
         # number of worker threads running
@@ -78,18 +94,20 @@ module Workling
         # Listen for one worker class
         def clazz_listen(clazz)
           logger.debug("Listener thread #{clazz.name} started")
+          
+          thread_verify_database_connection = self.class.verify_database_connection
+          thread_sleep_time = self.class.sleep_time
+          thread_reset_time = self.class.reset_time
            
           # Read thread configuration if available
           if Workling.config.has_key?(:listeners)
             if Workling.config[:listeners].has_key?(clazz.to_s)
               config = Workling.config[:listeners][clazz.to_s].symbolize_keys
+              thread_verify_database_connection = config[:verify_database_connection] if config.has_key?(:verify_database_connection)
               thread_sleep_time = config[:sleep_time] if config.has_key?(:sleep_time)
               thread_reset_time = config[:reset_time] if config.has_key?(:reset_time)
             end
           end
-
-          thread_sleep_time ||= self.class.sleep_time
-          thread_reset_time ||= self.class.reset_time
                 
           # Setup connection to client (one per thread)
           connection = @client_class.new
@@ -100,21 +118,23 @@ module Workling
           while (!Thread.current[:shutdown]) do
             begin
             
-              # Thanks for this Brent! 
-              #
-              #     ...Just a heads up, due to how rails’ MySQL adapter handles this  
-              #     call ‘ActiveRecord::Base.connection.active?’, you’ll need 
-              #     to wrap the code that checks for a connection in in a mutex.
-              #
-              #     ....I noticed this while working with a multi-core machine that 
-              #     was spawning multiple workling threads. Some of my workling 
-              #     threads would hit serious issues at this block of code without 
-              #     the mutex.            
-              #
-              @mutex.synchronize do 
-                ActiveRecord::Base.connection.verify!  # Keep MySQL connection alive
-                unless ActiveRecord::Base.connection.active?
-                  logger.fatal("Failed - Database not available!")
+              if thread_verify_database_connection
+                # Thanks for this Brent! 
+                #
+                #     ...Just a heads up, due to how rails’ MySQL adapter handles this  
+                #     call ‘ActiveRecord::Base.connection.active?’, you’ll need 
+                #     to wrap the code that checks for a connection in in a mutex.
+                #
+                #     ....I noticed this while working with a multi-core machine that 
+                #     was spawning multiple workling threads. Some of my workling 
+                #     threads would hit serious issues at this block of code without 
+                #     the mutex.            
+                #
+                @mutex.synchronize do 
+                  ActiveRecord::Base.connection.verify!  # Keep MySQL connection alive
+                  unless ActiveRecord::Base.connection.active?
+                    logger.fatal("Failed - Database not available!")
+                  end
                 end
               end
 
@@ -166,6 +186,14 @@ module Workling
         end
         
         private
+          def fetch_bool_config(hash, key, default = true)
+            if hash.has_key?(key)
+              hash[:key]
+            else
+              default
+            end
+          end
+          
           if ActiveRecord::VERSION::STRING >= '2.3.0'
             def active_record_is_thread_safe?
               true
