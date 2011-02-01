@@ -84,10 +84,12 @@ module Workling
             if Workling.config[:listeners].has_key?(clazz.to_s)
               config = Workling.config[:listeners][clazz.to_s].symbolize_keys
               thread_sleep_time = config[:sleep_time] if config.has_key?(:sleep_time)
+              thread_reset_time = config[:reset_time] if config.has_key?(:reset_time)
             end
           end
 
-          hread_sleep_time ||= self.class.sleep_time
+          thread_sleep_time ||= self.class.sleep_time
+          thread_reset_time ||= self.class.reset_time
                 
           # Setup connection to client (one per thread)
           connection = @client_class.new
@@ -124,13 +126,13 @@ module Workling
                 logger.debug("Listener thread #{clazz.name} processed #{n.to_s} queue items") if n > 0
               end
 
-              sleep(self.class.sleep_time)
+              sleep(thread_sleep_time)
             
               # If there is a memcache error, hang for a bit to give it a chance to fire up again
               # and reset the connection.
               rescue Workling::WorklingConnectionError
                 logger.warn("Listener thread #{clazz.name} failed to connect. Resetting connection.")
-                sleep(self.class.reset_time)
+                sleep(thread_reset_time)
                 connection.reset
             end
           end
