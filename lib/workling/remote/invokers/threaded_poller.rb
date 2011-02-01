@@ -12,6 +12,12 @@ module Workling
       class ThreadedPoller < Workling::Remote::Invokers::Base
         
         cattr_accessor :sleep_time, :reset_time
+        
+        class DummyMutex
+          def synchronize
+            yield
+          end
+        end
       
         def initialize(routing, client_class)
           super
@@ -20,12 +26,18 @@ module Workling
           ThreadedPoller.reset_time = Workling.config[:reset_time] || 30
           
           @workers = ThreadGroup.new
-          @mutex = Mutex.new
+          if active_record_is_thread_safe?
+            @mutex = DummyMutex.new
+          else
+            @mutex = Mutex.new
+          end
         end      
           
         def listen                
           # Allow concurrency for our tasks
-          ActiveRecord::Base.allow_concurrency = true
+          if !active_record_is_thread_safe?
+            ActiveRecord::Base.allow_concurrency = true
+          end
 
           # Create a thread for each worker.
           Workling::Discovery.discovered.each do |clazz|
@@ -143,6 +155,17 @@ module Workling
         
           return n
         end
+        
+        private
+          if ActiveRecord::VERSION::STRING >= '2.3.0'
+            def active_record_is_thread_safe?
+              true
+            end
+          else
+            def active_record_is_thread_safe?
+              false
+            end
+          end
       end
     end
   end
