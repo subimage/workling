@@ -3,10 +3,12 @@ plugin_root = File.join plugin_test, '..'
 plugin_lib = File.join plugin_root, 'lib'
 
 require 'rubygems'
-require 'active_support'
+gem 'activerecord', '< 3.0.0'
 require 'active_record'
+require 'active_support'
 require 'test/spec'
 require 'mocha'
+require 'logger'
 
 $:.unshift plugin_lib, plugin_test
 
