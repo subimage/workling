@@ -103,6 +103,12 @@ module Workling
         Workling::Base.logger.info "WORKLING: couldn't find a memcache client - you need one for the starling runner. "
       end
     end
+    # SystemTimer is not thread-safe. Force memcache-client to not use SystemTimer.
+    if defined?(MemCacheTimer)
+      require 'timeout'
+      Object.send(:remove_const, :MemCacheTimer)
+      Object.const_set(:MemCacheTimer, Timeout)
+    end
   end
   
   # attempts to load amqp and writes out descriptive error message if not present
