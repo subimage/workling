@@ -7,6 +7,13 @@ require File.dirname(__FILE__) + '/../lib/workling/remote/invokers/threaded_poll
 require File.dirname(__FILE__) + '/../lib/workling/remote/invokers/eventmachine_subscriber'
 require File.dirname(__FILE__) + '/../lib/workling/routing/class_and_method_routing'
 
+# SystemTimer is not thread-safe. Force memcache-client to not use SystemTimer.
+if defined?(MemCacheTimer)
+  require 'timeout'
+  Object.send(:remove_const, :MemCacheTimer)
+  Object.const_set(:MemCacheTimer, Timeout)
+end
+
 client = Workling::Remote.dispatcher.client
 invoker = Workling::Remote.invoker
 poller = invoker.new(Workling::Routing::ClassAndMethodRouting.new, client.class)
