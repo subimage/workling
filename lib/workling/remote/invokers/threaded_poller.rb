@@ -183,6 +183,8 @@ module Workling
           end
         
           return n
+        ensure
+          release_active_record_connection
         end
         
         private
