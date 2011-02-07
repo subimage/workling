@@ -60,7 +60,13 @@ module Workling
           @total_threads = total_threads
           
           # Wait for all workers to complete
-          @workers.list.each { |t| t.join }
+          @workers.list.each do |t|
+            begin
+              t.join
+            rescue
+              # Ignore exceptions, the thread already logs them.
+            end
+          end
 
           logger.debug("Reaped listener threads. ")
         
@@ -158,6 +164,12 @@ module Workling
           end
         
           logger.debug("Listener thread #{clazz.name} ended")
+        rescue Exception => e
+          logger.error("*** Error in client thread #{clazz.name} " +
+            "0x#{Thread.current.object_id.to_s(16)}: " +
+            "#{e}\n" +
+            e.backtrace.join("\n"))
+          raise e
         ensure
           release_active_record_connection
         end
