@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+require 'stringio'
+require 'thread'
 require 'workling/remote/invokers/base'
 
 #
@@ -33,6 +35,7 @@ module Workling
           else
             @mutex = Mutex.new
           end
+          @logger_mutex = Mutex.new
         end      
           
         def listen                
@@ -99,7 +102,7 @@ module Workling
 
         # Listen for one worker class
         def clazz_listen(clazz)
-          logger.debug("Listener thread #{clazz.name} started")
+          logger.debug("Listener thread #{clazz.name} #{Thread.current.object_id.to_s(16)} started")
           
           thread_verify_database_connection = self.class.verify_database_connection
           thread_sleep_time = self.class.sleep_time
@@ -119,6 +122,10 @@ module Workling
           connection = @client_class.new
           connection.connect
           logger.info("** Starting client #{ connection.class } for #{clazz.name} queue")
+          
+          local_log = StringIO.new
+          local_logger = Logger.new(local_log)
+          local_logger.level = logger.level
      
           # Start dispatching those messages
           while (!Thread.current[:shutdown]) do
@@ -147,9 +154,16 @@ module Workling
               # Dispatch and process the messages
               done = false
               while !done
-                n = dispatch!(connection, clazz)
+                local_log.seek(0)
+                local_log.truncate(0)
+                n = dispatch!(connection, clazz, local_logger)
                 done = n == 0 || Thread.current[:shutdown]
-                logger.debug("Listener thread #{clazz.name} processed #{n.to_s} queue items") if n > 0
+                if n > 0
+                  @logger_mutex.synchronize do
+                    logger.info(local_log.string)
+                    logger.debug("Listener thread #{clazz.name} processed #{n.to_s} queue items")
+                  end
+                end
               end
 
               sleep(thread_sleep_time)
@@ -176,7 +190,7 @@ module Workling
       
         # Dispatcher for one worker class. Will throw MemCacheError if unable to connect.
         # Returns the number of worker methods called
-        def dispatch!(connection, clazz)
+        def dispatch!(connection, clazz, logger = nil)
           n = 0
           for queue in @routing.queue_names_routing_class(clazz)
             begin
@@ -185,8 +199,11 @@ module Workling
                 n += 1
                 handler = @routing[queue]
                 method_name = @routing.method_name(queue)
-                logger.debug("Calling #{handler.class.to_s}\##{method_name}(#{result.inspect})")
-                handler.dispatch_to_worker_method(method_name, result)
+                logger.debug("\n### Calling #{handler.class.to_s}\##{method_name}(#{result.inspect})")
+                t1 = Time.now
+                handler.dispatch_to_worker_method(method_name, result, logger)
+                t2 = Time.now
+                logger.debug(sprintf("Finished in %.1f msec", (t2 - t1) * 1000))
               end
             rescue MemCache::MemCacheError => e
               logger.error("FAILED to connect with queue #{ queue }: #{ e } }")
