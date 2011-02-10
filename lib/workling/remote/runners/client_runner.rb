@@ -1,3 +1,4 @@
+require 'thread'
 require 'workling/remote/runners/base'
 require 'workling/clients/memcache_queue_client'
 
@@ -28,16 +29,19 @@ module Workling
         cattr_accessor :client
         @@client ||= Workling::Clients::MemcacheQueueClient.new
         
+        def initialize
+          @mutex = Mutex.new
+        end
+        
         # enqueues the job onto the client
         def run(clazz, method, options = {})
-          
-          # neet to connect in here as opposed to the constructor, since the EM loop is
-          # not available there. 
-          @connected ||= self.class.client.connect
-          
+          @mutex.synchronize do
+            # need to connect in here as opposed to the constructor, since the EM loop is
+            # not available there. 
+            @connected ||= self.class.client.connect
+          end
           self.class.client.request(@@routing.queue_for(clazz, method), options)    
-          
-          return nil
+          nil
         end
       end
     end
