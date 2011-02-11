@@ -191,6 +191,7 @@ module Workling
         # Dispatcher for one worker class. Will throw MemCacheError if unable to connect.
         # Returns the number of worker methods called
         def dispatch!(connection, clazz, logger = nil)
+          logger ||= self.logger
           n = 0
           for queue in @routing.queue_names_routing_class(clazz)
             begin

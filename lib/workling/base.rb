@@ -49,11 +49,12 @@ module Workling
           @temp_loggers[Thread.current] = logger
         end
       end
+      real_logger = logger || @@logger
       begin
         self.send(method, options)
       rescue Exception => e
         raise e if e.kind_of?(Workling::WorklingError)
-        logger.error "WORKLING ERROR: runner could not invoke #{ self.class }:#{ method } with #{ options.inspect }. error was: #{ e.inspect }\n #{ e.backtrace.join("\n") }"
+        real_logger.error "WORKLING ERROR: runner could not invoke #{ self.class }:#{ method } with #{ options.inspect }. error was: #{ e.inspect }\n #{ e.backtrace.join("\n") }"
 
         # reraise after logging. the exception really can't go anywhere in many cases. (spawn traps the exception)
         raise e if Workling.raise_exceptions?
