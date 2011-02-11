@@ -55,6 +55,10 @@ module Workling
           worker.dispatch_to_worker_method(method, args)
         end
         
+        def status
+          "This poller does not support querying its status."
+        end
+        
         # returns the Workling::Base.logger
         def logger; Workling::Base.logger; end
         

@@ -20,6 +20,72 @@ module Workling
             yield
           end
         end
+        
+        class WorkerStatus
+          attr_reader :thread
+          attr_reader :clazz
+          
+          def initialize(thread, clazz)
+            @mutex = Mutex.new
+            @log = StringIO.new
+            @thread = thread
+            @clazz = clazz
+          end
+          
+          def clear_log
+            @mutex.synchronize do
+              @log.seek(0)
+              @log.truncate(0)
+            end
+          end
+          
+          def log_string
+            @mutex.synchronize do
+              @log.string
+            end
+          end
+          
+          def worker_name
+            "#{@clazz.name} #{@thread.object_id.to_s(16)}"
+          end
+          
+          def puts(s)
+            @mutex.synchronize do
+              @log.puts(s)
+            end
+          end
+          
+          def write(s)
+            @mutex.synchronize do
+              @log.write(s)
+            end
+          end
+          
+          def <<(s)
+            @mutex.synchronize do
+              @log << s
+            end
+          end
+          
+          def flush
+          end
+          
+          def close
+            @mutex.synchronize do
+              @log.close
+            end
+          end
+          
+          def closed?
+            @mutex.synchronize do
+              @log.closed?
+            end
+          end
+          
+          def to_io
+            self
+          end
+        end
       
         def initialize(routing, client_class)
           super
@@ -56,7 +122,11 @@ module Workling
             logger.debug("Discovered listener #{clazz}; spawning #{nthreads} thread(s)")
             total_threads += nthreads
             nthreads.times do
-              @workers.add(Thread.new(clazz) { |c| clazz_listen(c) })
+              thread = Thread.new(clazz) do |c|
+                Thread.current[:status] = WorkerStatus.new(Thread.current, clazz)
+                clazz_listen(c)
+              end
+              @workers.add(thread)
             end
           end
           
@@ -83,7 +153,7 @@ module Workling
         # Check if all Worker threads have been started. 
         def started?
           logger.debug("checking if started... list size is #{ worker_threads }")
-          @total_threads == worker_threads
+          @total_threads == worker_threads && @workers.list.all? { |w| w[:status] }
         end
         
         # number of worker threads running
@@ -99,10 +169,47 @@ module Workling
           @workers.list.each { |w| w[:shutdown] = true }
           logger.info("Listener threads were shut down.  ")
         end
+        
+        def status
+          workers = @workers.list
+          backtraces = gather_thread_backtraces(workers)
+          
+          result = "#{workers.size} workers\n"
+          workers.each_with_index do |thread, i|
+            status = thread[:status]
+            if status
+              result << "\n"
+              result << "### #{i}. Worker thread #{status.worker_name}\n"
+              
+              result << "   Active log:\n"
+              log_string = status.log_string
+              if log_string.empty?
+                result << "      (empty; thread seems to be idle)\n"
+              else
+                str = indent(log_string, 6)
+                result << str
+                result << "\n" if !str.end_with?("\n")
+              end
+              
+              result << "   Backtrace:\n"
+              if (backtrace = backtraces[status.thread])
+                str = indent(backtrace, 6)
+                result << str
+                result << "\n" if !str.end_with?("\n")
+              else
+                result << "      (not available; requires Ruby Enterprise Edition or Ruby >= 1.9.2)\n"
+              end
+            end
+          end
+          
+          result << "\nEnd of status.\n"
+          result
+        end
 
         # Listen for one worker class
         def clazz_listen(clazz)
-          logger.debug("Listener thread #{clazz.name} #{Thread.current.object_id.to_s(16)} started")
+          status = Thread.current[:status]
+          logger.debug("Listener thread #{status.worker_name} started")
           
           thread_verify_database_connection = self.class.verify_database_connection
           thread_sleep_time = self.class.sleep_time
@@ -123,8 +230,7 @@ module Workling
           connection.connect
           logger.info("** Starting client #{ connection.class } for #{clazz.name} queue")
           
-          local_log = StringIO.new
-          local_logger = Logger.new(local_log)
+          local_logger = Logger.new(status)
           local_logger.level = logger.level
      
           # Start dispatching those messages
@@ -154,13 +260,13 @@ module Workling
               # Dispatch and process the messages
               done = false
               while !done
-                local_log.seek(0)
-                local_log.truncate(0)
+                status.clear_log
                 n = dispatch!(connection, clazz, local_logger)
                 done = n == 0 || Thread.current[:shutdown]
                 if n > 0
                   @logger_mutex.synchronize do
-                    logger.info(local_log.string)
+                    logger.info("\n")
+                    logger.info(status.log_string)
                     logger.debug("Listener thread #{clazz.name} processed #{n.to_s} queue items")
                   end
                 end
@@ -180,7 +286,7 @@ module Workling
           logger.debug("Listener thread #{clazz.name} ended")
         rescue Exception => e
           logger.error("*** Error in client thread #{clazz.name} " +
-            "0x#{Thread.current.object_id.to_s(16)}: " +
+            "#{Thread.current.object_id.to_s(16)}: " +
             "#{e}\n" +
             e.backtrace.join("\n"))
           raise e
@@ -191,7 +297,17 @@ module Workling
         # Dispatcher for one worker class. Will throw MemCacheError if unable to connect.
         # Returns the number of worker methods called
         def dispatch!(connection, clazz, logger = nil)
-          logger ||= self.logger
+          if !logger
+            logger = self.logger
+            logger.debug("\n")
+          end
+          status = Thread.current[:status]
+          if status
+            worker_name = status.worker_name
+          else
+            worker_name = "?"
+          end
+          
           n = 0
           for queue in @routing.queue_names_routing_class(clazz)
             begin
@@ -200,7 +316,9 @@ module Workling
                 n += 1
                 handler = @routing[queue]
                 method_name = @routing.method_name(queue)
-                logger.debug("\n### Calling #{handler.class.to_s}\##{method_name}(#{result.inspect})")
+                logger.debug("\n") if n > 1
+                logger.debug("### Calling #{handler.class.to_s}\##{method_name}(#{result.inspect}) | " +
+                  "pid=#{Process.pid} thread=#{worker_name}")
                 t1 = Time.now
                 handler.dispatch_to_worker_method(method_name, result, logger)
                 t2 = Time.now
@@ -224,6 +342,35 @@ module Workling
             else
               default
             end
+          end
+          
+          def gather_thread_backtraces(threads)
+            if Kernel.respond_to?(:caller_for_all_threads)
+              temp = caller_for_all_threads
+              result = {}
+              threads.each do |thread|
+                result[thread] = temp[thread]
+              end
+            elsif Thread.current.respond_to?(:backtrace)
+              result = {}
+              threads.each do |thread|
+                result[thread] = thread.backtrace
+              end
+            end
+            result
+          end
+          
+          def indent(string_or_array, level)
+            indentation = " " * level
+            if string_or_array.is_a?(String)
+              lines = string_or_array.split("\n")
+            else
+              lines = string_or_array.dup
+            end
+            lines.map! do |line|
+              indentation + line
+            end
+            lines.join("\n")
           end
           
           if ActiveRecord::VERSION::STRING >= '2.3.0'

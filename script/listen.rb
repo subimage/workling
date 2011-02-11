@@ -18,7 +18,7 @@ client = Workling::Remote.dispatcher.client
 invoker = Workling::Remote.invoker
 poller = invoker.new(Workling::Routing::ClassAndMethodRouting.new, client.class)
 
-puts '** Rails loaded.'
+puts "** Rails loaded. PID #{Process.pid}"
 puts "** Starting #{ invoker }..."
 puts '** Use CTRL-C to stop.'
 
@@ -26,6 +26,16 @@ ActiveRecord::Base.logger = Workling::Base.logger
 ActionController::Base.logger = Workling::Base.logger
 
 trap(:INT) { poller.stop; exit }
+trap(:QUIT) do
+  begin
+    STDERR.puts 'hi!'; STDERR.flush; STDERR.puts poller.status; STDERR.puts 'done'
+  rescue Exception => e
+    STDERR.puts "*** Exception in SIGQUIT handler: #{e}"
+    STDERR.puts e.backtrace.join("\n")
+  ensure
+    STDERR.flush
+  end
+end
 
 begin
   poller.listen
