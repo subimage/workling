@@ -27,63 +27,16 @@ module Workling
           
           def initialize(thread, clazz)
             @mutex = Mutex.new
-            @log = StringIO.new
             @thread = thread
             @clazz = clazz
           end
           
-          def clear_log
-            @mutex.synchronize do
-              @log.seek(0)
-              @log.truncate(0)
-            end
-          end
-          
           def log_string
-            @mutex.synchronize do
-              @log.string
-            end
+            Workling::Base.logger.peek(@thread)
           end
           
           def worker_name
             "#{@clazz.name} #{@thread.object_id.to_s(16)}"
-          end
-          
-          def puts(s)
-            @mutex.synchronize do
-              @log.puts(s)
-            end
-          end
-          
-          def write(s)
-            @mutex.synchronize do
-              @log.write(s)
-            end
-          end
-          
-          def <<(s)
-            @mutex.synchronize do
-              @log << s
-            end
-          end
-          
-          def flush
-          end
-          
-          def close
-            @mutex.synchronize do
-              @log.close
-            end
-          end
-          
-          def closed?
-            @mutex.synchronize do
-              @log.closed?
-            end
-          end
-          
-          def to_io
-            self
           end
         end
       
@@ -101,7 +54,6 @@ module Workling
           else
             @mutex = Mutex.new
           end
-          @logger_mutex = Mutex.new
         end      
           
         def listen                
@@ -183,13 +135,11 @@ module Workling
               result << "### #{i + 1}. Worker thread #{status.worker_name}\n"
               
               result << "   Active log:\n"
-              log_string = status.log_string
+              log_string = status.log_string.strip
               if log_string.empty?
                 result << "      (empty; thread seems to be idle)\n"
               else
-                str = indent(log_string, 6)
-                result << str
-                result << "\n" if !str.end_with?("\n")
+                result << indent(log_string, 6) << "\n"
               end
               
               result << "   Backtrace:\n"
@@ -232,9 +182,6 @@ module Workling
           connection = @client_class.new
           connection.connect
           logger.info("** Starting client #{ connection.class } for #{clazz.name} queue")
-          
-          local_logger = Logger.new(status)
-          local_logger.level = logger.level
      
           # Start dispatching those messages
           while (!Thread.current[:shutdown]) do
@@ -261,16 +208,14 @@ module Workling
               end
 
               # Dispatch and process the messages
-              done = false
-              while !done
-                status.clear_log
-                n = dispatch!(connection, clazz, local_logger)
-                done = n == 0 || Thread.current[:shutdown]
-                if n > 0
-                  @logger_mutex.synchronize do
-                    logger.info("\n")
-                    logger.info(status.log_string)
+              logger.autoflush!(false) do
+                done = false
+                while !done
+                  n = dispatch!(connection, clazz, true)
+                  done = n == 0 || Thread.current[:shutdown]
+                  if n > 0
                     logger.debug("Listener thread #{clazz.name} processed #{n.to_s} queue items")
+                    logger.flush
                   end
                 end
               end
@@ -288,7 +233,7 @@ module Workling
         
           logger.debug("Listener thread #{clazz.name} ended")
         rescue Exception => e
-          logger.error("*** Error in client thread #{clazz.name} " +
+          STDERR.puts("*** Error in client thread #{clazz.name} " +
             "#{Thread.current.object_id.to_s(16)}: " +
             "#{e}\n" +
             e.backtrace.join("\n"))
@@ -299,11 +244,7 @@ module Workling
       
         # Dispatcher for one worker class. Will throw MemCacheError if unable to connect.
         # Returns the number of worker methods called
-        def dispatch!(connection, clazz, logger = nil)
-          if !logger
-            logger = self.logger
-            logger.debug("\n")
-          end
+        def dispatch!(connection, clazz, print_newline = false)
           status = Thread.current[:status]
           if status
             worker_name = status.worker_name
@@ -319,11 +260,11 @@ module Workling
                 n += 1
                 handler = @routing[queue]
                 method_name = @routing.method_name(queue)
-                logger.debug("\n") if n > 1
+                logger.debug("\n") if print_newline
                 logger.debug("### Calling #{handler.class.to_s}\##{method_name}(#{result.inspect}) | " +
                   "pid=#{Process.pid} thread=#{worker_name}")
                 t1 = Time.now
-                handler.dispatch_to_worker_method(method_name, result, logger)
+                handler.dispatch_to_worker_method(method_name, result)
                 t2 = Time.now
                 logger.debug(sprintf("Finished in %.1f msec", (t2 - t1) * 1000))
               end

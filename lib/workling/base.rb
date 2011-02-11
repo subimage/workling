@@ -1,4 +1,5 @@
 require 'thread'
+require 'workling/thread_local_logger'
 
 #
 #  All worker classes must inherit from this class, and be saved in app/workers. 
@@ -17,7 +18,7 @@ require 'thread'
 module Workling
   class Base
     cattr_accessor :logger
-    @@logger ||= ::RAILS_DEFAULT_LOGGER
+    @@logger ||= ThreadLocalLogger.new(::RAILS_DEFAULT_LOGGER)
     
     def self.inherited(subclass)
       Workling::Discovery.discovered << subclass
@@ -26,15 +27,9 @@ module Workling
     def initialize
       super
       
-      @loggers_mutex = Mutex.new
-      @temp_loggers = {}
       create
     end
     
-    def logger
-      @temp_loggers[Thread.current] || @@logger
-    end
-
     # Put worker initialization code in here. This is good for restarting jobs that
     # were interrupted.
     def create
@@ -43,27 +38,15 @@ module Workling
     # takes care of suppressing remote errors but raising Workling::WorklingNotFoundError
     # where appropriate. swallow workling exceptions so that everything behaves like remote code.
     # otherwise StarlingRunner and SpawnRunner would behave too differently to NotRemoteRunner.
-    def dispatch_to_worker_method(method, options, logger = nil)
-      if logger
-        @loggers_mutex.synchronize do
-          @temp_loggers[Thread.current] = logger
-        end
-      end
-      real_logger = logger || @@logger
+    def dispatch_to_worker_method(method, options)
       begin
         self.send(method, options)
       rescue Exception => e
         raise e if e.kind_of?(Workling::WorklingError)
-        real_logger.error "WORKLING ERROR: runner could not invoke #{ self.class }:#{ method } with #{ options.inspect }. error was: #{ e.inspect }\n #{ e.backtrace.join("\n") }"
+        logger.error "WORKLING ERROR: runner could not invoke #{ self.class }:#{ method } with #{ options.inspect }. error was: #{ e.inspect }\n #{ e.backtrace.join("\n") }"
 
         # reraise after logging. the exception really can't go anywhere in many cases. (spawn traps the exception)
         raise e if Workling.raise_exceptions?
-      end
-    ensure
-      if logger
-        @loggers_mutex.synchronize do
-          @temp_loggers.delete(Thread.current)
-        end
       end
     end    
   
