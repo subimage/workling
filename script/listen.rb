@@ -28,7 +28,7 @@ ActionController::Base.logger = Workling::Base.logger
 trap(:INT) { poller.stop; exit }
 trap(:QUIT) do
   begin
-    STDERR.puts 'hi!'; STDERR.flush; STDERR.puts poller.status; STDERR.puts 'done'
+    STDERR.puts poller.status
   rescue Exception => e
     STDERR.puts "*** Exception in SIGQUIT handler: #{e}"
     STDERR.puts e.backtrace.join("\n")

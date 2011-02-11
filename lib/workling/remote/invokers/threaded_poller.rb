@@ -174,12 +174,13 @@ module Workling
           workers = @workers.list
           backtraces = gather_thread_backtraces(workers)
           
-          result = "#{workers.size} workers\n"
+          result = "[#{Time.now}] Status report for Workling process #{Process.pid}\n"
+          result << "#{workers.size} workers (there are supposed to be #{@total_threads.inspect})\n"
           workers.each_with_index do |thread, i|
             status = thread[:status]
+            result << "\n"
             if status
-              result << "\n"
-              result << "### #{i}. Worker thread #{status.worker_name}\n"
+              result << "### #{i + 1}. Worker thread #{status.worker_name}\n"
               
               result << "   Active log:\n"
               log_string = status.log_string
@@ -199,6 +200,8 @@ module Workling
               else
                 result << "      (not available; requires Ruby Enterprise Edition or Ruby >= 1.9.2)\n"
               end
+            else
+              result << "### #{i + 1}. Worker thread #{thread}\n"
             end
           end
           
