@@ -15,12 +15,13 @@ module Workling
       @underlying_logger = underlying_logger
       @local_state = {}
       @level = Logger::DEBUG
+      @formatter = nil
+      @progname = nil
+      @datetime_format = nil
     end
   
-    [:formatter, :formatter=, :progname, :progname=,
-     :<<, :add, :close, :datetime_format, :datetime_format=, :debug,
-     :error, :fatal, :format_message, :format_severity, :formatter,
-     :info, :log, :progname, :unknown, :warn].each do |method_name|
+    [:<<, :add, :close, :debug, :error, :fatal, :format_message, :format_severity,
+     :info, :log, :unknown, :warn].each do |method_name|
       line = __LINE__
       eval(%Q{
         def #{method_name}(*args, &block)
@@ -33,17 +34,22 @@ module Workling
       }, binding, __FILE__, line + 1)
     end
     
-    def level
-      @level
-    end
-    
-    def level=(value)
-      @mutex.synchronize do
-        @local_state.each_value do |state|
-          state.logger.level = value
+    [:level, :formatter, :progname, :datetime_format].each do |attribute|
+      line = __LINE__
+      eval(%Q{
+        def #{attribute}
+          @#{attribute}
         end
-      end
-      value
+        
+        def #{attribute}=(value)
+          @mutex.synchronize do
+            @#{attribute} = value
+            @local_state.each_value do |state|
+              state.logger.#{attribute} = value
+            end
+          end
+        end
+      }, binding, __FILE__, line + 1)
     end
     
     def debug?
@@ -119,10 +125,13 @@ module Workling
         attr_reader :logger, :buffer
         attr_accessor :autoflush
       
-        def initialize(level)
+        def initialize(level, formatter, progname, datetime_format)
           @buffer = StringIO.new
           @logger = Logger.new(@buffer)
           @logger.level = level
+          @logger.formatter = formatter
+          @logger.progname = progname
+          @logger.datetime_format = datetime_format
           @autoflush = true
         end
       
@@ -144,7 +153,7 @@ module Workling
       end
     
       def local_state(thread = Thread.current)
-        @local_state[thread] ||= LocalState.new(@level)
+        @local_state[thread] ||= LocalState.new(@level, @formatter, @progname, @datetime_format)
       end
   end
 end
