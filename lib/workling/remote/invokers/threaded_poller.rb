@@ -282,7 +282,7 @@ module Workling
         private
           def fetch_bool_config(hash, key, default = true)
             if hash.has_key?(key)
-              hash[:key]
+              hash[key]
             else
               default
             end
