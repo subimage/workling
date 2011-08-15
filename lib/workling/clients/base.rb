@@ -49,6 +49,13 @@ module Workling
       def close
         raise NotImplementedError.new("Implement close() in your client. ")
       end
+      
+      #
+      #  Notes completion of a job to the job broker.
+      #
+      def complete(work_uid, error_state)
+        # nop
+      end
     end
   end
 end

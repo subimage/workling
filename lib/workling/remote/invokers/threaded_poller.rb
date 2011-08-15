@@ -254,8 +254,11 @@ module Workling
           
           n = 0
           for queue in @routing.queue_names_routing_class(clazz)
+            result = error = nil
             begin
-              result = connection.retrieve(queue)
+              @mutex.synchronize do
+                result = connection.retrieve(queue)
+              end
               if result
                 n += 1
                 handler = @routing[queue]
@@ -267,10 +270,19 @@ module Workling
                 handler.dispatch_to_worker_method(method_name, result)
                 t2 = Time.now
                 logger.debug(sprintf("Finished in %.1f msec", (t2 - t1) * 1000))
+                @mutex.synchronize do
+                  connection.complete(result[:uid])
+                end
               end
             rescue MemCache::MemCacheError => e
+              error = e
               logger.error("FAILED to connect with queue #{ queue }: #{ e } }")
               raise e
+            rescue Exception => e
+              error = e
+              raise e
+            ensure
+              connection.complete(result[:uid], error) if result
             end
           end
         
