@@ -53,7 +53,7 @@ module Workling
       #
       #  Notes completion of a job to the job broker.
       #
-      def complete(work_uid, error_state)
+      def complete(work_uid, error=nil)
         # nop
       end
     end

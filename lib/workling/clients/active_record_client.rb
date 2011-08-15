@@ -20,7 +20,7 @@ module Workling
         # nop
       end
 
-      def complete(uid, error)
+      def complete(uid, error=nil)
         namespace = Workling.config[:namespace] || ""
         uid = namespace + ":" + uid
         WorklingJob.transaction do

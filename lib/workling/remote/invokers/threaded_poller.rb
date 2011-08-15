@@ -273,9 +273,6 @@ module Workling
                 handler.dispatch_to_worker_method(method_name, result)
                 t2 = Time.now
                 logger.debug(sprintf("Finished in %.1f msec", (t2 - t1) * 1000))
-                @mutex.synchronize do
-                  connection.complete(result[:uid])
-                end
               end
             rescue MemCache::MemCacheError => e
               error = e
@@ -289,7 +286,9 @@ module Workling
                 raise e
               end
             ensure
-              connection.complete(result[:uid], error) if result
+              @mutex.synchronize do
+                connection.complete(result[:uid], error) if result
+              end
             end
           end
         
