@@ -35,6 +35,7 @@ context "the invoker 'threaded poller'" do
     client = mock()
     client.expects(:retrieve).at_least_once.returns("hi")
     client.expects(:connect).at_least_once.returns(true)
+    client.expects(:complete).at_least_once
     Workling::Clients::MemoryQueueClient.expects(:new).at_least_once.returns(client)
     
     listener = Thread.new { @invoker.listen }
@@ -53,6 +54,7 @@ context "the invoker 'threaded poller'" do
     client = mock()
     client.expects(:retrieve).at_least_once.returns("hi")
     client.expects(:connect).at_least_once.returns(true)
+    client.expects(:complete).at_least_once
     Workling::Clients::MemoryQueueClient.expects(:new).at_least_once.returns(client)
     
     # Don't take longer than 10 seconds to shut this down. 

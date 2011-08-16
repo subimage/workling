@@ -1,6 +1,10 @@
 require File.dirname(__FILE__) + '/test_helper.rb'
 
 context "the remote runner" do
+  setup do
+    Workling::Remote.dispatcher = nil
+  end
+  
   specify "should be able to invoke a task on a worker" do
     Util.any_instance.stubs(:echo).with("hello")
     Workling::Remote.run(:util, :echo, "hello")
