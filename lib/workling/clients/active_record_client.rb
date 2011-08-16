@@ -28,6 +28,7 @@ module Workling
             :lock => true)
           if job
             job.status = "processed"
+            job.finished_at = Time.now
             if error
               status = Thread.current[:status]
               job.error = true
@@ -59,6 +60,7 @@ module Workling
           if job
             status = Thread.current[:status]
             job.status = "processing"
+            job.started_at = Time.now
             job.worker_name = status.worker_name
             job.save!
             job.options
