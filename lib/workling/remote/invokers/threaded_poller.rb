@@ -267,7 +267,7 @@ module Workling
                 logger.debug("### Calling #{handler.class.to_s}\##{method_name}(#{result.inspect}) | " +
                   "pid=#{Process.pid} thread=#{worker_name}")
                 t1 = Time.now
-                handler.dispatch_to_worker_method(method_name, result)
+                error = handler.dispatch_to_worker_method(method_name, result)
                 t2 = Time.now
                 logger.debug(sprintf("Finished in %.1f msec", (t2 - t1) * 1000))
               end

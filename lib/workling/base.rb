@@ -38,7 +38,10 @@ module Workling
     # takes care of suppressing remote errors but raising Workling::WorklingNotFoundError
     # where appropriate. swallow workling exceptions so that everything behaves like remote code.
     # otherwise StarlingRunner and SpawnRunner would behave too differently to NotRemoteRunner.
+    #
+    # Returns the error object if it exists.
     def dispatch_to_worker_method(method, options)
+      error = nil
       begin
         self.send(method, options)
       rescue Exception => e
@@ -47,7 +50,10 @@ module Workling
 
         # reraise after logging. the exception really can't go anywhere in many cases. (spawn traps the exception)
         raise e if Workling.raise_exceptions?
+        error = e
       end
+
+      error
     end    
   
     # thanks to blaine cook for this suggestion.
