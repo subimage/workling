@@ -12,6 +12,10 @@ namespace :db do
     end
     
     namespace :workling do
+      description = "Rollback the database through scripts in vendor/plugins/workling/lib/db/migrate"
+      description << "and update db/schema.rb by invoking db:schema:dump. Turn off output with VERBOSE=false."
+      
+      desc description
       task :down => :environment do
         ActiveRecord::Migration.verbose = ENV["VERBOSE"] ? ENV["VERBOSE"] == "true" : true
         ActiveRecord::Migrator.rollback("vendor/plugins/workling/lib/db/migrate/")
