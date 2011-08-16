@@ -13,8 +13,7 @@ module Workling
     module Invokers
       class ThreadedPoller < Workling::Remote::Invokers::Base
         
-        cattr_accessor :verify_database_connection, :sleep_time, :reset_time,
-          :die_on_exception
+        cattr_accessor :verify_database_connection, :sleep_time, :reset_time
         
         class DummyMutex
           def synchronize
@@ -48,8 +47,6 @@ module Workling
             fetch_bool_config(Workling.config, :verify_database_connection, true)
           ThreadedPoller.sleep_time = Workling.config[:sleep_time] || 2
           ThreadedPoller.reset_time = Workling.config[:reset_time] || 30
-          ThreadedPoller.die_on_exception = 
-            fetch_bool_config(Workling.config, :die_on_exception, false)
           
           @workers = ThreadGroup.new
           if active_record_is_thread_safe?
@@ -277,14 +274,10 @@ module Workling
             rescue MemCache::MemCacheError => e
               error = e
               logger.error("FAILED to connect with queue #{ queue }: #{ e } }")
-              if self.class.die_on_exception
-                raise e
-              end
+              raise e
             rescue Exception => e
               error = e
-              if self.class.die_on_exception
-                raise e
-              end
+              raise e
             ensure
               @mutex.synchronize do
                 connection.complete(result[:uid], error) if result
