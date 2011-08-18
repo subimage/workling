@@ -53,17 +53,21 @@ module Workling
       def retrieve(key)
         namespace = Workling.config[:namespace] || ""
         key = namespace + ":" + key
-        WorklingJob.transaction do
-          job = WorklingJob.find(:first,
-            :conditions => ["queue = ? AND status IS NULL", key],
-            :lock => true)
-          if job
+        job = WorklingJob.find(:first,
+          :conditions => ["queue = ? AND status IS NULL", key])
+          
+        # Need to use update_all and check return value to avoid deadlock
+        if job
+          count = WorklingJob.update_all ["status = ?", "processing"], ["id = ?", job.id]
+          if count == 1
             status = Thread.current[:status]
             job.status = "processing"
             job.started_at = Time.now
             job.worker_name = status.worker_name
             job.save!
             job.options
+          else
+            nil
           end
         end
       end
