@@ -53,10 +53,15 @@ module Workling
       def retrieve(key)
         namespace = Workling.config[:namespace] || ""
         key = namespace + ":" + key
-        job = ActiveRecord::Base.silence do
-          WorklingJob.find(:first,
-            :conditions => ["queue = ? AND status IS NULL", key])
-        end
+        
+        # Manually hack together a silencer due to the ThreadLocalLogger
+        old_log_level = Workling::Base.logger.level
+        ActiveRecord::Base.logger.send(:"level=", Logger::ERROR, false)
+
+        job = WorklingJob.find(:first,
+          :conditions => ["queue = ? AND status IS NULL", key])
+
+        ActiveRecord::Base.logger.send(:"level=", old_log_level, false)
 
         # Need to use update_all and check return value to avoid deadlock
         if job
