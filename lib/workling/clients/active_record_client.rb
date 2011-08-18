@@ -58,7 +58,11 @@ module Workling
           
         # Need to use update_all and check return value to avoid deadlock
         if job
-          count = WorklingJob.update_all ["status = ?", "processing"], ["id = ?", job.id]
+          count = nil
+          ActiveRecord::Base.silence do
+            count = WorklingJob.update_all ["status = ?", "processing"], ["id = ?", job.id]
+          end
+
           if count == 1
             status = Thread.current[:status]
             job.status = "processing"
