@@ -53,8 +53,8 @@ module Workling
       def retrieve(key)
         namespace = Workling.config[:namespace] || ""
         key = namespace + ":" + key
-        ActiveRecord::Base.silence do
-          job = WorklingJob.find(:first,
+        job = ActiveRecord::Base.silence do
+          WorklingJob.find(:first,
             :conditions => ["queue = ? AND status IS NULL", key])
         end
 
