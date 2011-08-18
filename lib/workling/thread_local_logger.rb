@@ -37,14 +37,24 @@ module Workling
     [:level, :formatter, :progname, :datetime_format].each do |attribute|
       line = __LINE__
       eval(%Q{
-        def #{attribute}
-          @#{attribute}
+        def #{attribute}(all=true)
+          if all
+            @#{attribute}
+          else
+            state = local_state
+            state.logger.#{attribute}
+          end
         end
         
-        def #{attribute}=(value)
+        def #{attribute}=(value, all=true)
           @mutex.synchronize do
-            @#{attribute} = value
-            @local_state.each_value do |state|
+            if all
+              @#{attribute} = value
+              @local_state.each_value do |state|
+                state.logger.#{attribute} = value
+              end
+            else
+              state = local_state
               state.logger.#{attribute} = value
             end
           end

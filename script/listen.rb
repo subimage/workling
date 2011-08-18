@@ -24,6 +24,8 @@ puts '** Use CTRL-C to stop.'
 
 ActiveRecord::Base.logger = Workling::Base.logger
 ActionController::Base.logger = Workling::Base.logger
+self.class.send(:remove_const, "RAILS_DEFAULT_LOGGER")
+self.class.const_set("RAILS_DEFAULT_LOGGER", Workling::Base.logger)
 
 trap(:USR1) { poller.stop }
 trap(:INT) { poller.stop; exit }
