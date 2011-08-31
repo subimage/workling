@@ -1,19 +1,10 @@
 require 'workling/clients/base'
 
-#
-#  This client can be used for all Queue Servers that speak Memcached, such as Starling. 
-#
-#  Wrapper for the memcache connection. The connection is made using fiveruns-memcache-client, 
-#  or memcache-client, if this is not available. See the README for a discussion of the memcache 
-#  clients. 
-#
-#  method_missing delegates all messages through to the underlying memcache connection. 
-#
+# Workling client for REDIS, because Starling is a piece of garbage
+# that falls over about once a month and eats up all my ram in the process.
 module Workling
   module Clients
     class RedisQueueClient < Workling::Clients::Base
-      
-      # the memcache connection object
       attr_accessor :connection
       
       #  the client attempts to connect to queueserver using the configuration options found in 
