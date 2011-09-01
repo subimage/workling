@@ -11,6 +11,7 @@ require 'active_support'
 require 'test/spec'
 require 'mocha'
 require 'logger'
+require 'redis'
 
 $:.unshift plugin_lib, plugin_test
 
@@ -28,6 +29,7 @@ require "workling/base"
 Workling.config = DEFAULT_CONFIG.dup
 Workling.try_load_a_memcache_client
 
+require 'workling/clients/redis_queue_client'
 require "workling/discovery"
 require "workling/routing/class_and_method_routing"
 require "workling/remote/invokers/basic_poller"
@@ -37,10 +39,12 @@ require "workling/remote"
 require "workling/remote/runners/not_remote_runner"
 require "workling/remote/runners/spawn_runner"
 require "workling/remote/runners/starling_runner"
+require "workling/remote/runners/redis_runner"
 require "workling/remote/runners/client_runner"
 require "workling/remote/runners/backgroundjob_runner"
 require "workling/return/store/memory_return_store"
 require "workling/return/store/starling_return_store"
+require "workling/return/store/redis_return_store"
 require "mocks/client"
 require "clients/memory_queue_client"
 require "runners/thread_runner"

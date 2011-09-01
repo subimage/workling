@@ -5,5 +5,8 @@ module Workling
     class MemcacheQueueClient < Workling::Clients::Base
       def raise_unless_connected!; end
     end
+    class RedisQueueClient < Workling::Clients::Base
+      def raise_unless_connected!; end
+    end
   end
 end
