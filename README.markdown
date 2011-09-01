@@ -87,13 +87,13 @@ Redis is the recommended replacement for Starling, [which has proven to be ineff
 
 To use Redis with Workling, you'll need [Redis](http://redis.io/) installed, along with the "redis" gem.
 
-  sudo gem install redis
+    sudo gem install redis
   
 ## Starting Redis on development
 
 After installing redis on your development box, simply run...
 
-  redis-server
+    redis-server
   
 You'll want a more robust setup for production, but you can find information on that elsewhere.
 
