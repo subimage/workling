@@ -2,7 +2,9 @@
 
 Workling gives your Rails App a simple API that you can use to make code run in the background, outside of the your request. 
 
-You can configure how the background code will be run. Currently, workling supports Starling, BackgroundJob and Spawn Runners. Workling is a bit like Actve* for background work: you can write your code once, then swap in any of the supported background Runners later. This keeps things flexible. 
+*This fork of the Workling project is intended for use with Redis instead of Starling.*
+
+You can configure how the background code will be run. Currently, workling supports *Redis*, Starling, BackgroundJob and Spawn Runners. Workling is a bit like Active* for background work: you can write your code once, then swap in any of the supported background Runners later. This keeps things flexible. 
 
 ## Installing Workling
 
@@ -74,6 +76,61 @@ Workling automatically detects and uses Spawn, if installed. Spawn basically for
 You'll see that this executes pretty much instantly. Run 'top' in another terminal window, and look for the new ruby process. This might be around 30 MB. This tells you that using spawn as a runner will result low latency, but will take at least 30MB for each request you make. 
 
 You cannot run your workers on a remote machine or cluster them with spawn. You also have no persistence: if you've fired of a lot of work and everything dies, there's no way of picking up where you left off. 
+
+# Using the Redis runner
+
+Redis is a fast, efficient data store. It supports strings, lists, sets, sorted sets, and hashes. It's easy to query, and manage.
+
+Redis is the recommended replacement for Starling, [which has proven to be inefficient, unstable, and bloated](http://www.unlimitednovelty.com/2009/04/twitter-blaming-ruby-for-their-mistakes.html).
+
+## Installing Redis and the redis gem
+
+To use Redis with Workling, you'll need [Redis](http://redis.io/) installed, along with the "redis" gem.
+
+  sudo gem install redis
+  
+## Starting Redis on development
+
+After installing redis on your development box, simply run...
+
+  redis-server
+  
+You'll want a more robust setup for production, but you can find information on that elsewhere.
+
+## Configuring workling.yml
+
+Workling copies a file called workling.yml into your applications config directory. The config file tells Workling on which port Redis is listening. 
+
+Notice that the default production port is 6379, but you could point at a redis server on another machine.
+
+    development:
+      listens_on: localhost:6379
+      redis_options:
+        namespace: myapp_dev
+      sleep_time: 2
+      reset_time: 30
+      
+## Configuring Workling to use Redis
+
+You'll also need to edit your environment.rb file to utilize Redis. Here's my configuration pulled from a working app. From inside 
+
+    Rails::Initializer.run do |config|
+      # ... standard rails config here
+      
+      # Workling / Redis config
+      config.after_initialize do
+        # Don't require remote runner to be running for test.
+        if RAILS_ENV == 'test'
+          Workling::Remote.dispatcher = Workling::Remote::Runners::NotRemoteRunner.new
+          Workling::Return::Store.instance = Workling::Return::Store::MemoryReturnStore.new
+        else
+          # Use REDIS for Workling backend. Oh so custom!
+          Workling::Remote.dispatcher = Workling::Remote::Runners::RedisRunner.new
+          Workling::Remote.dispatcher.client = Workling::Clients::RedisQueueClient.new
+          Workling::Return::Store.instance = Workling::Return::Store::RedisReturnStore.new
+        end
+      end
+    end
 
 # Using the Starling runner
 
